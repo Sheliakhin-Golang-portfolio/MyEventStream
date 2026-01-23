@@ -161,7 +161,7 @@ Future stages and features will be documented here as they are implemented.
 ## Notes
 
 - All stages follow semantic versioning principles
-- Each stage is designed to be production-ready and maintainable
+- Each stage is designed to be runnable and maintainable
 - Code follows Go 1.25+ conventions and idiomatic patterns
 - Security best practices are applied throughout (network isolation, no hardcoded secrets)
 - The project is stateless by design - all state is managed by the message broker
