@@ -64,6 +64,12 @@ All detailed documentation is moved to `docs/` folder:
 
 ---
 
+## CHANGELOG
+
+As there are no multiple releases during development, all version changes are contained in CHANGELOG.md file.
+
+---
+
 ## Project Status
 
 This project is developed for portfolio and learning purposes.  
