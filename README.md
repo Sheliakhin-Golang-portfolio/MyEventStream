@@ -58,7 +58,9 @@ Detailed architectural decisions are documented separately.
 
 ## Documentation
 
-All detailed documentation will be provided as I will proceed with development
+All detailed documentation is moved to `docs/` folder:
+
+- [Running Locally & Environment Variables](docs/RUNNING.md)
 
 ---
 

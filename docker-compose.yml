@@ -1,16 +1,53 @@
 version: '3.8'
 
 services:
+  kafka:
+    image: confluentinc/cp-kafka:${KAFKA_IMAGE_VERSION:-latest}
+    container_name: kafka
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # KRaft mode configuration
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Listeners configuration
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Topic and replication settings (from .env)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:-1}
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: ${KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR:-1}
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: ${KAFKA_TRANSACTION_STATE_LOG_MIN_ISR:-1}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: ${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-true}
+      # Log directories for KRaft
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    expose:
+      - "9092"
+      - "9093"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - myeventstream-network
+
   myeventstream:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: myeventstream
     restart: unless-stopped
+    depends_on:
+      - kafka
     env_file:
       - .env
     ports:
       - "${METRICS_PORT:-8080}:8080"
+    networks:
+      - myeventstream-network
     # Healthcheck placeholder
     # healthcheck:
     #   test: ["CMD", "echo", "Healthcheck not implemented yet"]
@@ -18,4 +55,11 @@ services:
     #   timeout: 3s
     #   start_period: 5s
     #   retries: 3
-    # Note: Kafka/NATS setup will be added in later stages
+
+volumes:
+  kafka-data:
+    driver: local
+
+networks:
+  myeventstream-network:
+    driver: bridge
