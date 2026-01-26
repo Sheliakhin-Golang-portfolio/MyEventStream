@@ -16,6 +16,8 @@ import (
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/config"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/consumer"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/logger"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/obs"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/queue"
 	"go.uber.org/zap"
 )
 
@@ -34,10 +36,19 @@ func main() {
 
 	logger.Logger.Info("Starting MyEventStream service",
 		zap.String("serviceName", cfg.Service.Name),
+		zap.Int("queueBufferSize", cfg.Queue.BufferSize),
+		zap.String("metricsPort", cfg.Metrics.Port),
 	)
 
-	// Create Kafka consumer
-	kafkaConsumer, err := consumer.NewConsumer(cfg, logger.Logger)
+	// Initialize metrics
+	metrics := obs.NewMetrics(cfg.Service.Name)
+
+	// Create queue with metrics
+	eventQueue := queue.NewQueue(cfg.Queue.BufferSize, metrics)
+	defer eventQueue.Close()
+
+	// Create Kafka consumer with queue
+	kafkaConsumer, err := consumer.NewConsumer(cfg, logger.Logger, eventQueue)
 	if err != nil {
 		logger.Logger.Fatal("Failed to create Kafka consumer", zap.Error(err))
 		os.Exit(1)
@@ -48,8 +59,17 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start consumer in goroutine
+	// Start metrics HTTP server in goroutine
 	var wg sync.WaitGroup
+	wg.Go(func() {
+		if err := obs.StartMetricsServer(ctx, cfg.Metrics.Port, logger.Logger); err != nil {
+			if err != context.Canceled {
+				logger.Logger.Error("Metrics server error", zap.Error(err))
+			}
+		}
+	})
+
+	// Start consumer in goroutine
 	wg.Go(func() {
 		if err := kafkaConsumer.Start(ctx); err != nil {
 			if err != context.Canceled {
@@ -81,7 +101,7 @@ func main() {
 
 	select {
 	case <-done:
-		logger.Logger.Info("Consumer stopped gracefully")
+		logger.Logger.Info("All services stopped gracefully")
 	case <-shutdownCtx.Done():
 		logger.Logger.Warn("Shutdown timeout exceeded, forcing exit")
 	}

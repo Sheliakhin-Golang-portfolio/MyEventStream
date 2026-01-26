@@ -7,6 +7,141 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - Stage 0.3: Queue & Backpressure Integration
+
+### Added
+
+#### Event Type
+- **`internal/types/event.go`**: Shared event type definition
+  - `Event` struct with `Key []byte` and `Value []byte` fields
+  - Used across consumer, queue, and future processing stages
+  - Supports arbitrary data formats
+
+#### Queue Package
+- **`internal/queue/queue.go`**: Bounded buffered queue implementation
+  - `Queue` struct with bounded channel for events
+  - `NewQueue(size int, metrics *obs.Metrics)` constructor
+  - `Enqueue(ctx context.Context, event *types.Event) error` - blocking enqueue with backpressure
+  - `Dequeue(ctx context.Context) (*types.Event, error)` - blocking dequeue
+  - `Depth() int` - returns current queue depth
+  - `Close()` - graceful channel closure using `sync.Once`
+  - Backpressure: blocks when queue is full, preventing unbounded memory growth
+  - Thread-safe implementation with `done` channel for closure signaling
+  - Automatic metrics updates on enqueue/dequeue operations
+
+#### Observability Package
+- **`internal/obs/metrics.go`**: Prometheus metrics implementation
+  - `Metrics` struct with `QueueDepth` gauge metric
+  - `NewMetrics(serviceName string)` constructor
+  - `IncrementQueueDepth()` - increments queue depth metric
+  - `DecrementQueueDepth()` - decrements queue depth metric
+  - `NullifyQueueDepth()` - sets queue depth to 0
+  - Metrics registered with Prometheus default registry
+  - Service name label for metric identification
+
+- **`internal/obs/http.go`**: HTTP metrics server
+  - `StartMetricsServer(ctx context.Context, port string, logger *zap.Logger)` function
+  - Exposes Prometheus `/metrics` endpoint
+  - Respects context cancellation for graceful shutdown
+  - HTTP server with configurable timeouts
+  - Uses `promhttp.Handler()` for standard Prometheus format
+
+#### Configuration Updates
+- **`internal/config/config.go`**: Extended configuration
+  - `QueueConfig` struct with `BufferSize int` field
+  - `MetricsConfig` struct with `Port string` field
+  - `Queue` and `Metrics` fields added to `Config` struct
+  - `QUEUE_BUFFER_SIZE` environment variable support (default: 1000)
+  - `METRICS_PORT` environment variable support (default: 8080)
+  - Validation: `QUEUE_BUFFER_SIZE` must be > 0
+
+#### Consumer Integration
+- **`internal/consumer/kafka_consumer.go`**: Queue integration
+  - `queue *queue.Queue` field added to `Consumer` struct
+  - `NewConsumer()` signature updated to accept queue parameter
+  - `Start()` method now creates `*types.Event` and enqueues to queue
+  - Handles enqueue errors (context cancellation vs. other errors)
+  - Logs enqueue operations with queue depth metadata
+  - Backpressure automatically applied when queue is full
+
+#### Main Application Updates
+- **`cmd/main.go`**: Complete observability and queue integration
+  - Metrics initialization with service name
+  - Queue creation with configurable buffer size
+  - Metrics HTTP server started in goroutine
+  - Consumer receives queue reference
+  - Improved goroutine management using `sync.WaitGroup.Go()` method
+  - Graceful shutdown order: context cancellation → metrics server → queue → consumer
+
+#### Prometheus Integration
+- **`prometheus/prometheus.yml`**: Prometheus scrape configuration
+  - Scrape job for `myeventstream` service
+  - Target: `myeventstream:8080`
+  - Metrics path: `/metrics`
+  - Scrape interval: 15 seconds
+  - Service and environment labels
+
+#### Grafana Integration
+- **`grafana/provisioning/datasources/prometheus.yml`**: Automatic datasource provisioning
+  - Prometheus datasource configured automatically
+  - URL: `http://prometheus:9090`
+  - Set as default datasource
+  - 15-second time interval
+
+- **`grafana/provisioning/dashboards/dashboard.yml`**: Dashboard provisioning
+  - Automatic dashboard discovery from `/var/lib/grafana/dashboards`
+  - 10-second update interval
+  - UI updates allowed
+
+- **`grafana/dashboards/queue_depth.json`**: Queue depth dashboard
+  - Graph panel showing queue depth over time
+  - Stat panel with current queue depth and color thresholds
+  - Gauge panel with visual queue depth representation
+  - Thresholds: green (<500), yellow (500-800), red (>800)
+  - 10-second refresh interval
+
+#### Docker Infrastructure
+- **`docker-compose.yml`**: Prometheus and Grafana services
+  - Prometheus service with volume persistence
+  - Grafana service with admin credentials from environment
+  - Service dependencies: Grafana → Prometheus → MyEventStream
+  - Port mappings: Prometheus (9090), Grafana (3000)
+  - Volume mounts for configuration and data persistence
+  - Network isolation within `myeventstream-network`
+
+#### Dependencies
+- Added `github.com/prometheus/client_golang v1.23.2` for Prometheus metrics
+
+### Changed
+
+- **`internal/consumer/kafka_consumer.go`**: 
+  - Now enqueues events instead of just logging
+  - Logs include queue depth information
+
+- **`cmd/main.go`**:
+  - Uses `sync.WaitGroup.Go()` for cleaner goroutine management
+  - Integrated metrics and queue initialization
+  - Enhanced graceful shutdown sequence
+
+- **`.env.example`**:
+  - Added `QUEUE_BUFFER_SIZE` with default value (1000)
+  - Added `METRICS_PORT` with default value (8080)
+  - Added `GRAFANA_ADMIN_USER` with default value (admin)
+  - Added `GRAFANA_ADMIN_PASSWORD` with default value (admin)
+
+### Technical Details
+
+- Queue implements backpressure by blocking on `Enqueue()` when channel is full
+- Metrics are updated atomically using Prometheus gauge operations
+- Queue closure uses `sync.Once` to ensure idempotent behavior
+- All blocking operations respect context cancellation
+- Metrics server runs independently and can be scraped by Prometheus
+- Grafana dashboard automatically loads on service startup
+- Prometheus scrapes metrics every 15 seconds
+- Queue depth metric includes service name label for multi-service scenarios
+
+---
+
 ## [0.2.0] - Stage 0.2: Kafka Integration
 
 ### Added
@@ -149,11 +284,10 @@ Future stages and features will be documented here as they are implemented.
 ### Planned Features
 
 - Worker pool implementation for controlled concurrency
-- Internal buffered queue for backpressure control
 - Message processing pipeline (decode → validate → process)
 - Retry mechanism with exponential backoff
 - Dead-Letter Queue (DLQ) integration
-- Metrics and observability endpoints
+- Additional metrics (throughput, error rates, retry rates)
 - Health check implementation
 
 ---

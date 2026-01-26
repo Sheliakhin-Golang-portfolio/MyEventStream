@@ -1,0 +1,18 @@
+# Prometheus configuration for MyEventStream
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'myeventstream-monitor'
+
+# Scrape configurations
+scrape_configs:
+  # Scrape metrics from MyEventStream service
+  - job_name: 'myeventstream'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['myeventstream:8080']
+        labels:
+          service: 'myeventstream'
+          environment: 'development'

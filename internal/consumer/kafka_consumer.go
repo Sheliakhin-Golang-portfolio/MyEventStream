@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/config"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/queue"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/types"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -13,10 +15,11 @@ import (
 type Consumer struct {
 	reader *kafka.Reader
 	logger *zap.Logger
+	queue  *queue.Queue
 }
 
 // NewConsumer creates a new Kafka consumer instance
-func NewConsumer(cfg *config.Config, logger *zap.Logger) (*Consumer, error) {
+func NewConsumer(cfg *config.Config, logger *zap.Logger, queue *queue.Queue) (*Consumer, error) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  cfg.Kafka.Brokers,
 		Topic:    cfg.Kafka.Topic,
@@ -28,6 +31,7 @@ func NewConsumer(cfg *config.Config, logger *zap.Logger) (*Consumer, error) {
 	return &Consumer{
 		reader: reader,
 		logger: logger,
+		queue:  queue,
 	}, nil
 }
 
@@ -65,14 +69,37 @@ func (c *Consumer) Start(ctx context.Context) error {
 			continue
 		}
 
+		// Create event from Kafka message
+		event := &types.Event{
+			Key:   msg.Key,
+			Value: msg.Value,
+		}
+
+		// Enqueue event (blocks if queue is full - backpressure)
+		if err := c.queue.Enqueue(ctx, event); err != nil {
+			if err == context.Canceled || err == context.DeadlineExceeded {
+				c.logger.Info("Consumer stopped due to context cancellation during enqueue")
+				return err
+			}
+			c.logger.Error("Failed to enqueue event",
+				zap.Error(err),
+				zap.String("topic", msg.Topic),
+				zap.Int("partition", msg.Partition),
+				zap.Int64("offset", msg.Offset),
+			)
+			// Continue to retry
+			continue
+		}
+
 		// Log message metadata only (not content)
-		c.logger.Info("Received message",
+		c.logger.Info("Enqueued message",
 			zap.String("topic", msg.Topic),
 			zap.Int("partition", msg.Partition),
 			zap.Int64("offset", msg.Offset),
 			zap.Int("keyLength", len(msg.Key)),
 			zap.Int("valueLength", len(msg.Value)),
 			zap.Time("timestamp", msg.Time),
+			zap.Int("queueDepth", c.queue.Depth()),
 		)
 
 		// For now, we rely on the Reader's automatic commit behavior,

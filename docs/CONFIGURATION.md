@@ -45,6 +45,20 @@ Used by:
 
 ---
 
+## Grafana Configuration (Docker Compose)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `admin` |
+
+Used by:
+- Grafana container (docker-compose)
+
+**Note:** Change the default password in production. These map to `GF_SECURITY_ADMIN_USER` and `GF_SECURITY_ADMIN_PASSWORD` in the Grafana container.
+
+---
+
 ## Service Configuration
 
 | Variable | Description |

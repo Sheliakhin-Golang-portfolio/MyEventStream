@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -14,6 +15,8 @@ type Config struct {
 	Kafka   KafkaConfig
 	Logging LoggingConfig
 	Service ServiceConfig
+	Queue   QueueConfig
+	Metrics MetricsConfig
 }
 
 // KafkaConfig holds Kafka connection settings
@@ -31,6 +34,16 @@ type LoggingConfig struct {
 // ServiceConfig holds service settings
 type ServiceConfig struct {
 	Name string
+}
+
+// QueueConfig holds queue configuration
+type QueueConfig struct {
+	BufferSize int
+}
+
+// MetricsConfig holds metrics configuration
+type MetricsConfig struct {
+	Port string
 }
 
 // Load reads configuration from environment variables
@@ -83,6 +96,27 @@ func Load() (*Config, error) {
 		serviceName = "myeventstream" // default
 	}
 	cfg.Service.Name = serviceName
+
+	// Queue configuration
+	queueBufferSizeStr := os.Getenv("QUEUE_BUFFER_SIZE")
+	if queueBufferSizeStr == "" {
+		queueBufferSizeStr = "1000" // default
+	}
+	queueBufferSize, err := strconv.Atoi(queueBufferSizeStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid QUEUE_BUFFER_SIZE: %w", err)
+	}
+	if queueBufferSize <= 0 {
+		return nil, fmt.Errorf("QUEUE_BUFFER_SIZE must be greater than 0, got: %d", queueBufferSize)
+	}
+	cfg.Queue.BufferSize = queueBufferSize
+
+	// Metrics configuration
+	metricsPort := os.Getenv("METRICS_PORT")
+	if metricsPort == "" {
+		metricsPort = "8080" // default
+	}
+	cfg.Metrics.Port = metricsPort
 
 	return cfg, nil
 }
