@@ -119,6 +119,7 @@ If Kafka runs in Docker, ensure port 9092 is published to the host (e.g. add `po
 - Failed messages are retried automatically according to configuration
 - Messages that fail after all retries are sent to the Dead-Letter Queue (DLQ)
 - The service implements graceful shutdown with a 30-second timeout
+- Concurrency is controlled via `WORKER_POOL_SIZE` (default: 10); adjust this to tune throughput based on your workload
 - Metrics (including `queue_depth` for backpressure visibility) are exposed at `/metrics` and scraped by Prometheus when using Docker Compose
 
 ---

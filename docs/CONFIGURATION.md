@@ -61,11 +61,11 @@ Used by:
 
 ## Service Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `METRICS_PORT` | Metrics server port |
-| `WORKER_POOL_SIZE` | Number of concurrent workers |
-| `QUEUE_BUFFER_SIZE` | Internal queue buffer size (backpressure control) |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `METRICS_PORT` | Metrics server port | `8080` |
+| `WORKER_POOL_SIZE` | Number of concurrent workers | `10` |
+| `QUEUE_BUFFER_SIZE` | Internal queue buffer size (backpressure control) | `1000` |
 
 Used by:
 - MyEventStream service

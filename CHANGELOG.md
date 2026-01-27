@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - Stage 0.4: Worker Pool Implementation
+
+### Added
+
+#### Worker Pool Package
+- **`internal/worker/pool.go`**: Fixed-size worker pool implementation
+  - `Pool` struct with configurable worker count
+  - `NewPool(workerCount int, queue *queue.Queue, logger *zap.Logger)` constructor
+  - `Start(ctx context.Context) error` - starts worker goroutines and begins processing
+  - `Stop() error` - gracefully stops all workers and waits for in-flight work to complete
+  - `worker(ctx context.Context, workerID int)` - main worker loop that dequeues and processes events
+  - `processEvent(ctx context.Context, event *types.Event, workerID int)` - placeholder event processing
+  - Thread-safe implementation with `sync.Mutex` for state protection
+  - Uses `sync.WaitGroup` to coordinate worker lifecycle
+  - Context-based cancellation for graceful shutdown
+  - Combined context handling to support both root context and pool-level cancellation
+  - Handles `context.Canceled`, `context.DeadlineExceeded`, and `queue.ErrQueueClosed` errors gracefully
+  - Worker ID tracking for observability and debugging
+  - Prevents double-start with `started` flag and `ErrPoolAlreadyStarted` error
+
+#### Configuration Updates
+- **`internal/config/config.go`**: Worker pool configuration
+  - `WorkerPoolConfig` struct with `Size int` field
+  - `WorkerPool` field added to `Config` struct
+  - `WORKER_POOL_SIZE` environment variable support (default: 10)
+  - Validation: `WORKER_POOL_SIZE` must be > 0
+
+#### Main Application Updates
+- **`cmd/main.go`**: Worker pool integration
+  - Worker pool creation with configurable size from environment
+  - Worker pool started in goroutine using `sync.WaitGroup.Go()`
+  - Enhanced graceful shutdown sequence:
+    1. Context cancellation signals all components
+    2. Worker pool stops gracefully (finishes in-flight events)
+    3. Queue closure
+    4. Consumer closure
+    5. Metrics server shutdown
+  - Improved error handling for worker pool lifecycle
+  - Logging includes worker pool size in startup information
+
+#### Documentation Updates
+- **`docs/CONFIGURATION.md`**: Added `WORKER_POOL_SIZE` documentation
+  - Default value: 10
+  - Description: Number of concurrent workers
+  - Usage context and tuning guidance
+
+### Changed
+
+- **`cmd/main.go`**:
+  - Enhanced graceful shutdown to include worker pool
+  - Worker pool stops before queue closure to ensure in-flight events complete
+  - Improved shutdown timeout handling (30 seconds)
+  - Better goroutine coordination using `sync.WaitGroup`
+
+- **`.env.example`**:
+  - Added `WORKER_POOL_SIZE` with default value (10)
+  - Added inline documentation for worker pool configuration
+
+### Technical Details
+
+- Worker pool implements fixed-size concurrency model
+- Workers block on `queue.Dequeue()` when queue is empty (expected behavior)
+- Graceful shutdown ensures no messages are dropped during service termination
+- Context cancellation propagates to all workers simultaneously
+- Worker pool respects both root context (for shutdown) and internal context (for pool lifecycle)
+- Event processing is currently a placeholder that logs metadata (key length, value length, queue depth)
+- Worker ID is included in all processing logs for observability
+- Pool state is protected by mutex to prevent race conditions during start/stop operations
+- All workers complete their current event before shutdown completes
+
+---
+
 ## [0.3.0] - Stage 0.3: Queue & Backpressure Integration
 
 ### Added
@@ -283,7 +355,6 @@ Future stages and features will be documented here as they are implemented.
 
 ### Planned Features
 
-- Worker pool implementation for controlled concurrency
 - Message processing pipeline (decode → validate → process)
 - Retry mechanism with exponential backoff
 - Dead-Letter Queue (DLQ) integration

@@ -12,11 +12,12 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	Kafka   KafkaConfig
-	Logging LoggingConfig
-	Service ServiceConfig
-	Queue   QueueConfig
-	Metrics MetricsConfig
+	Kafka     KafkaConfig
+	Logging   LoggingConfig
+	Service   ServiceConfig
+	Queue     QueueConfig
+	Metrics   MetricsConfig
+	WorkerPool WorkerPoolConfig
 }
 
 // KafkaConfig holds Kafka connection settings
@@ -44,6 +45,11 @@ type QueueConfig struct {
 // MetricsConfig holds metrics configuration
 type MetricsConfig struct {
 	Port string
+}
+
+// WorkerPoolConfig holds worker pool configuration
+type WorkerPoolConfig struct {
+	Size int
 }
 
 // Load reads configuration from environment variables
@@ -117,6 +123,20 @@ func Load() (*Config, error) {
 		metricsPort = "8080" // default
 	}
 	cfg.Metrics.Port = metricsPort
+
+	// Worker pool configuration
+	workerPoolSizeStr := os.Getenv("WORKER_POOL_SIZE")
+	if workerPoolSizeStr == "" {
+		workerPoolSizeStr = "10" // default
+	}
+	workerPoolSize, err := strconv.Atoi(workerPoolSizeStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid WORKER_POOL_SIZE: %w", err)
+	}
+	if workerPoolSize <= 0 {
+		return nil, fmt.Errorf("WORKER_POOL_SIZE must be greater than 0, got: %d", workerPoolSize)
+	}
+	cfg.WorkerPool.Size = workerPoolSize
 
 	return cfg, nil
 }

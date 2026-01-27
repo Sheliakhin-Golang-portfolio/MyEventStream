@@ -18,6 +18,7 @@ import (
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/logger"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/obs"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/queue"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/worker"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +38,7 @@ func main() {
 	logger.Logger.Info("Starting MyEventStream service",
 		zap.String("serviceName", cfg.Service.Name),
 		zap.Int("queueBufferSize", cfg.Queue.BufferSize),
+		zap.Int("workerPoolSize", cfg.WorkerPool.Size),
 		zap.String("metricsPort", cfg.Metrics.Port),
 	)
 
@@ -46,6 +48,14 @@ func main() {
 	// Create queue with metrics
 	eventQueue := queue.NewQueue(cfg.Queue.BufferSize, metrics)
 	defer eventQueue.Close()
+
+	// Create worker pool
+	workerPool, err := worker.NewPool(cfg.WorkerPool.Size, eventQueue, logger.Logger)
+	if err != nil {
+		logger.Logger.Fatal("Failed to create worker pool", zap.Error(err))
+		os.Exit(1)
+	}
+	defer workerPool.Stop()
 
 	// Create Kafka consumer with queue
 	kafkaConsumer, err := consumer.NewConsumer(cfg, logger.Logger, eventQueue)
@@ -78,6 +88,15 @@ func main() {
 		}
 	})
 
+	// Start worker pool in goroutine
+	wg.Go(func() {
+		if err := workerPool.Start(ctx); err != nil {
+			if err != context.Canceled {
+				logger.Logger.Error("Worker pool error", zap.Error(err))
+			}
+		}
+	})
+
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -89,10 +108,15 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	// Cancel root context to stop consumer
+	// Cancel root context to stop consumer and worker pool
 	cancel()
 
-	// Wait for consumer to finish or timeout
+	// Stop worker pool gracefully (finishes in-flight work)
+	if err := workerPool.Stop(); err != nil {
+		logger.Logger.Error("Error stopping worker pool", zap.Error(err))
+	}
+
+	// Wait for all services to finish or timeout
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
