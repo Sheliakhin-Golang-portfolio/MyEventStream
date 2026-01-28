@@ -25,6 +25,7 @@ It demonstrates:
 MyEventStream is an event processing service designed to consume events from message brokers (Kafka or NATS), process them through a controlled pipeline, and handle failures gracefully.
 
 The service architecture follows a clear flow:
+
 - **Ingestion Layer** consumes events from the broker
 - **Internal Buffered Queue** provides backpressure control
 - **Worker Pool** processes events with controlled concurrency
@@ -34,7 +35,7 @@ The service architecture follows a clear flow:
 
 The project is designed to demonstrate how real Go backend services are built and evolved, not to replace Kafka or NATS. EventStream focuses on at-least-once delivery, controlled concurrency, and operational visibility — the core problems most Go services solve in production.
 
-**Current Stage:** Stage 0.4 - Worker Pool
+**Current Stage:** Stage 0.5 - Processing Pipeline
 
 ---
 

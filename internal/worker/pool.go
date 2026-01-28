@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/pipeline"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/queue"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/types"
 	"go.uber.org/zap"
@@ -161,13 +162,39 @@ func (p *Pool) processEvent(ctx context.Context, event *types.Event, workerID in
 	default:
 	}
 
-	// Placeholder processing: log event metadata
-	p.logger.Info("Processing event",
-		zap.Int("workerID", workerID),
-		zap.Int("keyLength", len(event.Key)),
-		zap.Int("valueLength", len(event.Value)),
-		zap.Int("queueDepth", p.queue.Depth()),
-	)
+	payload, err := pipeline.Decode(ctx, event.Value)
+	if err != nil {
+		p.logger.Error("Pipeline decode failed",
+			zap.Error(err),
+			zap.Int("workerID", workerID),
+			zap.Int("keyLength", len(event.Key)),
+			zap.Int("valueLength", len(event.Value)),
+			zap.Int("queueDepth", p.queue.Depth()),
+		)
+		return
+	}
+
+	if err := pipeline.Validate(ctx, payload); err != nil {
+		p.logger.Error("Pipeline validate failed",
+			zap.Error(err),
+			zap.Int("workerID", workerID),
+			zap.Int("keyLength", len(event.Key)),
+			zap.Int("valueLength", len(event.Value)),
+			zap.Int("queueDepth", p.queue.Depth()),
+		)
+		return
+	}
+
+	if err := pipeline.Process(ctx, payload, p.logger); err != nil {
+		p.logger.Error("Pipeline process failed",
+			zap.Error(err),
+			zap.Int("workerID", workerID),
+			zap.Int("keyLength", len(event.Key)),
+			zap.Int("valueLength", len(event.Value)),
+			zap.Int("queueDepth", p.queue.Depth()),
+		)
+		return
+	}
 }
 
 // Stop gracefully stops the worker pool

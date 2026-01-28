@@ -7,12 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - Stage 0.5: Processing Pipeline Implementation
+
+### Added
+
+#### Processing Pipeline Package
+
+- `**internal/pipeline/decode.go**`: JSON decoding stage
+  - `Payload` struct with `Id string` field (`json:"Id"`)
+  - `Decode(ctx context.Context, value []byte) (*Payload, error)` function
+  - Uses `encoding/json` to unmarshal Kafka message values into `Payload`
+  - Returns typed `DecodeError` on malformed/invalid JSON
+  - Respects `context.Context` cancellation
+- `**internal/pipeline/validate.go**`: Payload validation stage
+  - `Validate(ctx context.Context, payload *Payload) error` function
+  - Ensures `Id` field is present and non-empty
+  - Returns typed `ValidationError` on validation failures
+  - Respects `context.Context` cancellation
+- `**internal/pipeline/process.go**`: Business logic stage
+  - `Process(ctx context.Context, payload *Payload, logger *zap.Logger) error` function
+  - Mock business logic that logs processed events with structured logging
+  - Deterministic logging (same input → same log output)
+  - Returns typed `ProcessError` on processing failures
+  - Respects `context.Context` cancellation
+- `**internal/pipeline/errors.go**`: Typed errors
+  - `DecodeError` for JSON decoding failures
+  - `ValidationError` for payload validation failures
+  - `ProcessError` for processing failures
+  - Error types implemented as structs with `Error()` (and `Unwrap()` where applicable)
+
+#### Unit Tests
+
+- `**internal/pipeline/decode_test.go**`: Table-driven tests for decode stage
+  - Valid JSON payloads
+  - Invalid/malformed JSON
+  - Empty JSON
+  - Missing `id` field
+  - Context cancellation during decode
+- `**internal/pipeline/validate_test.go**`: Table-driven tests for validate stage
+  - Valid payload with non-empty `Id`
+  - Empty `Id`
+  - Nil payload / missing `Id`
+  - Context cancellation during validate
+- `**internal/pipeline/process_test.go**`: Table-driven tests for process stage
+  - Successful processing with deterministic log output
+  - Context cancellation during process
+
+#### Changed
+
+- `**internal/worker/pool.go**`: Processing pipeline integration
+  - `processEvent` updated to call pipeline stages sequentially:
+    1. `pipeline.Decode(ctx, event.Value)`
+    2. `pipeline.Validate(ctx, payload)`
+    3. `pipeline.Process(ctx, payload, p.logger)`
+  - Error handling and logging for each stage with worker ID and event metadata
+  - Preserves existing graceful shutdown behavior and context handling
+
+### Technical Details
+
+- Processing pipeline implements explicit three-stage flow: decode → validate → process
+- All stages use typed errors to distinguish decoding, validation, and processing failures
+- All blocking/long-running operations respect `context.Context` for cancellation
+- Business logic layer is deterministic and easily testable
+- Worker pool delegates business processing to the pipeline while keeping lifecycle and shutdown semantics unchanged
+
+---
+
 ## [0.4.0] - Stage 0.4: Worker Pool Implementation
 
 ### Added
 
 #### Worker Pool Package
-- **`internal/worker/pool.go`**: Fixed-size worker pool implementation
+
+- `**internal/worker/pool.go**`: Fixed-size worker pool implementation
   - `Pool` struct with configurable worker count
   - `NewPool(workerCount int, queue *queue.Queue, logger *zap.Logger)` constructor
   - `Start(ctx context.Context) error` - starts worker goroutines and begins processing
@@ -28,14 +95,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prevents double-start with `started` flag and `ErrPoolAlreadyStarted` error
 
 #### Configuration Updates
-- **`internal/config/config.go`**: Worker pool configuration
+
+- `**internal/config/config.go**`: Worker pool configuration
   - `WorkerPoolConfig` struct with `Size int` field
   - `WorkerPool` field added to `Config` struct
   - `WORKER_POOL_SIZE` environment variable support (default: 10)
   - Validation: `WORKER_POOL_SIZE` must be > 0
 
 #### Main Application Updates
-- **`cmd/main.go`**: Worker pool integration
+
+- `**cmd/main.go**`: Worker pool integration
   - Worker pool creation with configurable size from environment
   - Worker pool started in goroutine using `sync.WaitGroup.Go()`
   - Enhanced graceful shutdown sequence:
@@ -48,20 +117,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Logging includes worker pool size in startup information
 
 #### Documentation Updates
-- **`docs/CONFIGURATION.md`**: Added `WORKER_POOL_SIZE` documentation
+
+- `**docs/CONFIGURATION.md**`: Added `WORKER_POOL_SIZE` documentation
   - Default value: 10
   - Description: Number of concurrent workers
   - Usage context and tuning guidance
 
 ### Changed
 
-- **`cmd/main.go`**:
+- `**cmd/main.go**`:
   - Enhanced graceful shutdown to include worker pool
   - Worker pool stops before queue closure to ensure in-flight events complete
   - Improved shutdown timeout handling (30 seconds)
   - Better goroutine coordination using `sync.WaitGroup`
-
-- **`.env.example`**:
+- `**.env.example**`:
   - Added `WORKER_POOL_SIZE` with default value (10)
   - Added inline documentation for worker pool configuration
 
@@ -84,13 +153,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Event Type
-- **`internal/types/event.go`**: Shared event type definition
+
+- `**internal/types/event.go**`: Shared event type definition
   - `Event` struct with `Key []byte` and `Value []byte` fields
   - Used across consumer, queue, and future processing stages
   - Supports arbitrary data formats
 
 #### Queue Package
-- **`internal/queue/queue.go`**: Bounded buffered queue implementation
+
+- `**internal/queue/queue.go**`: Bounded buffered queue implementation
   - `Queue` struct with bounded channel for events
   - `NewQueue(size int, metrics *obs.Metrics)` constructor
   - `Enqueue(ctx context.Context, event *types.Event) error` - blocking enqueue with backpressure
@@ -102,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic metrics updates on enqueue/dequeue operations
 
 #### Observability Package
-- **`internal/obs/metrics.go`**: Prometheus metrics implementation
+
+- `**internal/obs/metrics.go**`: Prometheus metrics implementation
   - `Metrics` struct with `QueueDepth` gauge metric
   - `NewMetrics(serviceName string)` constructor
   - `IncrementQueueDepth()` - increments queue depth metric
@@ -110,8 +182,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `NullifyQueueDepth()` - sets queue depth to 0
   - Metrics registered with Prometheus default registry
   - Service name label for metric identification
-
-- **`internal/obs/http.go`**: HTTP metrics server
+- `**internal/obs/http.go**`: HTTP metrics server
   - `StartMetricsServer(ctx context.Context, port string, logger *zap.Logger)` function
   - Exposes Prometheus `/metrics` endpoint
   - Respects context cancellation for graceful shutdown
@@ -119,7 +190,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses `promhttp.Handler()` for standard Prometheus format
 
 #### Configuration Updates
-- **`internal/config/config.go`**: Extended configuration
+
+- `**internal/config/config.go**`: Extended configuration
   - `QueueConfig` struct with `BufferSize int` field
   - `MetricsConfig` struct with `Port string` field
   - `Queue` and `Metrics` fields added to `Config` struct
@@ -128,7 +200,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Validation: `QUEUE_BUFFER_SIZE` must be > 0
 
 #### Consumer Integration
-- **`internal/consumer/kafka_consumer.go`**: Queue integration
+
+- `**internal/consumer/kafka_consumer.go**`: Queue integration
   - `queue *queue.Queue` field added to `Consumer` struct
   - `NewConsumer()` signature updated to accept queue parameter
   - `Start()` method now creates `*types.Event` and enqueues to queue
@@ -137,7 +210,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Backpressure automatically applied when queue is full
 
 #### Main Application Updates
-- **`cmd/main.go`**: Complete observability and queue integration
+
+- `**cmd/main.go**`: Complete observability and queue integration
   - Metrics initialization with service name
   - Queue creation with configurable buffer size
   - Metrics HTTP server started in goroutine
@@ -146,7 +220,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Graceful shutdown order: context cancellation → metrics server → queue → consumer
 
 #### Prometheus Integration
-- **`prometheus/prometheus.yml`**: Prometheus scrape configuration
+
+- `**prometheus/prometheus.yml**`: Prometheus scrape configuration
   - Scrape job for `myeventstream` service
   - Target: `myeventstream:8080`
   - Metrics path: `/metrics`
@@ -154,18 +229,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Service and environment labels
 
 #### Grafana Integration
-- **`grafana/provisioning/datasources/prometheus.yml`**: Automatic datasource provisioning
+
+- `**grafana/provisioning/datasources/prometheus.yml**`: Automatic datasource provisioning
   - Prometheus datasource configured automatically
   - URL: `http://prometheus:9090`
   - Set as default datasource
   - 15-second time interval
-
-- **`grafana/provisioning/dashboards/dashboard.yml`**: Dashboard provisioning
+- `**grafana/provisioning/dashboards/dashboard.yml**`: Dashboard provisioning
   - Automatic dashboard discovery from `/var/lib/grafana/dashboards`
   - 10-second update interval
   - UI updates allowed
-
-- **`grafana/dashboards/queue_depth.json`**: Queue depth dashboard
+- `**grafana/dashboards/queue_depth.json**`: Queue depth dashboard
   - Graph panel showing queue depth over time
   - Stat panel with current queue depth and color thresholds
   - Gauge panel with visual queue depth representation
@@ -173,7 +247,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 10-second refresh interval
 
 #### Docker Infrastructure
-- **`docker-compose.yml`**: Prometheus and Grafana services
+
+- `**docker-compose.yml**`: Prometheus and Grafana services
   - Prometheus service with volume persistence
   - Grafana service with admin credentials from environment
   - Service dependencies: Grafana → Prometheus → MyEventStream
@@ -182,20 +257,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Network isolation within `myeventstream-network`
 
 #### Dependencies
+
 - Added `github.com/prometheus/client_golang v1.23.2` for Prometheus metrics
 
 ### Changed
 
-- **`internal/consumer/kafka_consumer.go`**: 
+- `**internal/consumer/kafka_consumer.go**`: 
   - Now enqueues events instead of just logging
   - Logs include queue depth information
-
-- **`cmd/main.go`**:
+- `**cmd/main.go**`:
   - Uses `sync.WaitGroup.Go()` for cleaner goroutine management
   - Integrated metrics and queue initialization
   - Enhanced graceful shutdown sequence
-
-- **`.env.example`**:
+- `**.env.example**`:
   - Added `QUEUE_BUFFER_SIZE` with default value (1000)
   - Added `METRICS_PORT` with default value (8080)
   - Added `GRAFANA_ADMIN_USER` with default value (admin)
@@ -219,7 +293,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Configuration Management
-- **`internal/config/config.go`**: Configuration package with environment variable loading
+
+- `**internal/config/config.go**`: Configuration package with environment variable loading
   - `Config` struct with `Kafka`, `Logging`, and `Service` sub-configs
   - `Load()` function that reads from environment variables
   - Support for comma-separated Kafka broker addresses
@@ -227,7 +302,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional variables with defaults: `KAFKA_GROUP_ID`, `LOG_LEVEL`, `SERVICE_NAME`
 
 #### Structured Logging
-- **`internal/logger/logger.go`**: Structured logging package using zap
+
+- `**internal/logger/logger.go**`: Structured logging package using zap
   - Global `Logger` variable for application-wide logging
   - `Init(level string)` function to initialize logger with configurable log level
   - `Sync()` function for flushing buffered log entries
@@ -235,7 +311,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Production-ready logging configuration
 
 #### Kafka Consumer
-- **`internal/consumer/kafka_consumer.go`**: Kafka consumer implementation
+
+- `**internal/consumer/kafka_consumer.go**`: Kafka consumer implementation
   - `Consumer` struct with kafka-go reader
   - `NewConsumer()` constructor function
   - `Start(ctx context.Context)` method for consuming messages with context cancellation support
@@ -244,7 +321,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Respects context cancellation for graceful shutdown
 
 #### Main Application Updates
-- **`cmd/main.go`**: Complete application lifecycle management
+
+- `**cmd/main.go**`: Complete application lifecycle management
   - Configuration loading with error handling
   - Logger initialization
   - Kafka consumer creation and management
@@ -253,7 +331,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Proper goroutine management for consumer
 
 #### Docker Infrastructure
-- **`docker-compose.yml`**: Kafka service integration
+
+- `**docker-compose.yml**`: Kafka service integration
   - Kafka service using KRaft mode (no Zookeeper dependency)
   - Single-node Kafka setup with proper KRaft configuration
   - Network isolation with `myeventstream-network`
@@ -262,25 +341,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Environment variable support for Kafka configuration
 
 #### Dependencies
+
 - Added `github.com/joho/godotenv` for environment variable loading
 - Added `go.uber.org/zap` for structured logging
 - Added `github.com/segmentio/kafka-go` for Kafka consumer
 
 #### Documentation
-- **`docs/CONFIGURATION.md`**: Complete environment variable documentation
-- **`docs/RUNNING.md`**: Local development and running instructions
+
+- `**docs/CONFIGURATION.md**`: Complete environment variable documentation
+- `**docs/RUNNING.md**`: Local development and running instructions
 
 ### Changed
 
-- **`.env.example`**: Updated with Kafka configuration variables
+- `**.env.example**`: Updated with Kafka configuration variables
   - Added `KAFKA_BROKERS` with examples
   - Added `KAFKA_TOPIC` placeholder
   - Added `KAFKA_GROUP_ID` with default value
   - Added `LOG_LEVEL` with default value
   - Added `SERVICE_NAME` with default value
   - Added Kafka infrastructure configuration variables
-
-- **`go.mod`**: Updated with new dependencies
+- `**go.mod**`: Updated with new dependencies
   - Go version: 1.25
   - Module path: `github.com/Sheliakhin-Golang-portfolio/MyEventStream`
 
@@ -300,44 +380,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Project Structure
-- **`go.mod`**: Go module initialization
+
+- `**go.mod**`: Go module initialization
   - Module path: `github.com/Sheliakhin-Golang-portfolio/MyEventStream`
   - Go version: 1.25
 
 #### Directory Structure
-- **`cmd/`**: Application entry point directory
-- **`internal/`**: Private application code directory
-- **`docs/`**: Documentation directory
+
+- `**cmd/**`: Application entry point directory
+- `**internal/**`: Private application code directory
+- `**docs/**`: Documentation directory
 
 #### Entry Point
-- **`cmd/main.go`**: Basic main function with package documentation
+
+- `**cmd/main.go**`: Basic main function with package documentation
   - Empty `main()` function as initial placeholder
   - GoDoc package comment
 
 #### Configuration Template
-- **`.env.example`**: Environment variable template
+
+- `**.env.example**`: Environment variable template
   - Placeholder comments for Kafka broker configuration
   - Service configuration placeholders
   - Observability configuration placeholders
   - Inline documentation for each variable
 
 #### Docker Configuration
-- **`Dockerfile`**: Multi-stage build configuration
+
+- `**Dockerfile**`: Multi-stage build configuration
   - Builder stage using `golang:1.25-alpine`
   - Runtime stage using `alpine:latest`
   - Static binary compilation with CGO disabled
   - Binary size optimization with `-ldflags="-w -s"`
   - Healthcheck placeholder
   - Non-root user support ready
-
-- **`docker-compose.yml`**: Initial Docker Compose setup
+- `**docker-compose.yml**`: Initial Docker Compose setup
   - MyEventStream service definition
   - Basic healthcheck placeholder
   - Environment variable file reference
   - Port mappings for metrics endpoint
 
 #### Version Control
-- **`.gitignore`**: Git ignore patterns for Go projects
+
+- `**.gitignore**`: Git ignore patterns for Go projects
 
 ### Technical Details
 
@@ -370,3 +455,4 @@ Future stages and features will be documented here as they are implemented.
 - Code follows Go 1.25+ conventions and idiomatic patterns
 - Security best practices are applied throughout (network isolation, no hardcoded secrets)
 - The project is stateless by design - all state is managed by the message broker
+
