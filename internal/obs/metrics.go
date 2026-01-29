@@ -6,12 +6,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// Metrics holds all Prometheus metrics for the application
+// Metrics holds all Prometheus metrics for the application.
 type Metrics struct {
-	QueueDepth          prometheus.Gauge
-	RetryAttemptsTotal  prometheus.Counter
-	DLQMessagesTotal    prometheus.Counter
-	RetryExhaustedTotal prometheus.Counter
+	QueueDepth           prometheus.Gauge
+	EventsIngestedTotal  prometheus.Counter
+	EventsProcessedTotal prometheus.Counter
+	RetryAttemptsTotal   prometheus.Counter
+	DLQMessagesTotal     prometheus.Counter
+	RetryExhaustedTotal  prometheus.Counter
 }
 
 // NewMetrics creates and initializes a new Metrics instance
@@ -21,6 +23,20 @@ func NewMetrics(serviceName string) *Metrics {
 		QueueDepth: promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "queue_depth",
 			Help: "Current depth of the internal event queue",
+			ConstLabels: prometheus.Labels{
+				"service": serviceName,
+			},
+		}),
+		EventsIngestedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "events_ingested_total",
+			Help: "Total number of events ingested from the broker into the internal queue",
+			ConstLabels: prometheus.Labels{
+				"service": serviceName,
+			},
+		}),
+		EventsProcessedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "events_processed_total",
+			Help: "Total number of events successfully processed by the pipeline",
 			ConstLabels: prometheus.Labels{
 				"service": serviceName,
 			},
@@ -47,6 +63,16 @@ func NewMetrics(serviceName string) *Metrics {
 			},
 		}),
 	}
+}
+
+// IncrementEventsIngested increments the events ingested counter by 1
+func (m *Metrics) IncrementEventsIngested() {
+	m.EventsIngestedTotal.Inc()
+}
+
+// IncrementEventsProcessed increments the events processed counter by 1
+func (m *Metrics) IncrementEventsProcessed() {
+	m.EventsProcessedTotal.Inc()
 }
 
 // IncrementQueueDepth increments the queue depth gauge metric by 1

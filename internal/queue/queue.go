@@ -46,6 +46,7 @@ func (q *Queue) Enqueue(ctx context.Context, event *types.Event) error {
 		// Update metrics after successful enqueue
 		if q.metrics != nil {
 			q.metrics.IncrementQueueDepth()
+			q.metrics.IncrementEventsIngested()
 		}
 		return nil
 	case <-q.done:

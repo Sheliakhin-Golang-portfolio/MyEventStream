@@ -9,6 +9,7 @@ import (
 
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/config"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/dlq"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/obs"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/pipeline"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/queue"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/retry"
@@ -28,7 +29,7 @@ type Pool struct {
 	dlqProducer *dlq.Producer
 	retryConfig *config.RetryConfig
 	commitFunc  CommitFunc
-	metrics     MetricsRecorder
+	metrics     *obs.Metrics
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
@@ -36,16 +37,9 @@ type Pool struct {
 	mu          sync.Mutex
 }
 
-// MetricsRecorder is an interface for recording worker metrics
-type MetricsRecorder interface {
-	IncrementRetryAttempts()
-	IncrementDLQMessages()
-	IncrementRetryExhausted()
-}
-
 // NewPool creates a new worker pool with the specified number of workers
 // workerCount must be greater than 0
-func NewPool(workerCount int, queue *queue.Queue, logger *zap.Logger, dlqProducer *dlq.Producer, retryConfig *config.RetryConfig, commitFunc CommitFunc, metrics MetricsRecorder) (*Pool, error) {
+func NewPool(workerCount int, queue *queue.Queue, logger *zap.Logger, dlqProducer *dlq.Producer, retryConfig *config.RetryConfig, commitFunc CommitFunc, metrics *obs.Metrics) (*Pool, error) {
 	if workerCount <= 0 {
 		return nil, fmt.Errorf("worker count must be greater than 0, got: %d", workerCount)
 	}
@@ -246,6 +240,7 @@ func (p *Pool) processEvent(event *types.Event, workerID int) {
 
 	// Handle result
 	if err == nil {
+		p.metrics.IncrementEventsProcessed()
 		// Success - commit offset
 		if event.Meta != nil {
 			p.commitFunc(kafkaMsg)

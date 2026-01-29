@@ -69,6 +69,7 @@ After that the application is ready to use.
 
 ---
 
+<a id="observability"></a>
 ## Observability (Prometheus & Grafana)
 
 When running via Docker Compose, Prometheus and Grafana are available for monitoring.
@@ -78,12 +79,25 @@ When running via Docker Compose, Prometheus and Grafana are available for monito
 | Prometheus | http://localhost:9090   | Query metrics, targets, and scrape config |
 | Grafana    | http://localhost:3000   | Dashboards and visualization              |
 
+### Metrics exposed at `/metrics`
+
+The application exposes the following Prometheus metrics (all include a `service` label):
+
+| Metric                    | Type    | Description                                                                 |
+|---------------------------|---------|-----------------------------------------------------------------------------|
+| `queue_depth`             | Gauge   | Current depth of the internal event queue (backpressure visibility)         |
+| `events_ingested_total`   | Counter | Total number of events ingested from the broker into the internal queue     |
+| `events_processed_total`  | Counter | Total number of events successfully processed by the pipeline               |
+| `retry_attempts_total`    | Counter | Total number of retry attempts for failed events                            |
+| `dlq_messages_total`      | Counter | Total number of messages sent to the dead-letter queue                      |
+| `retry_exhausted_total`   | Counter | Total number of messages that exhausted all retry attempts                  |
+
 **Grafana** is pre-provisioned with:
 
 - A **Prometheus** datasource (points to `http://prometheus:9090`)
 - The **MyEventStream Queue Depth** dashboard, which visualizes the `queue_depth` metric
 
-Log in with the credentials from your `.env`: `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` (defaults: `admin` / `admin`). See [CONFIGURATION.md](CONFIGURATION.md) for details.
+All metrics above are available in Prometheus for ad-hoc queries and custom dashboards. Log in with the credentials from your `.env`: `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` (defaults: `admin` / `admin`). See [CONFIGURATION.md](CONFIGURATION.md) for details.
 
 ---
 
@@ -120,7 +134,7 @@ If Kafka runs in Docker, ensure port 9092 is published to the host (e.g. add `po
 - Messages that fail after all retries are sent to the Dead-Letter Queue (DLQ)
 - The service implements graceful shutdown with a 30-second timeout
 - Concurrency is controlled via `WORKER_POOL_SIZE` (default: 10); adjust this to tune throughput based on your workload
-- Metrics (including `queue_depth` for backpressure visibility) are exposed at `/metrics` and scraped by Prometheus when using Docker Compose
+- Metrics (queue depth, ingestion/processing counts, retries, DLQ) are exposed at `/metrics` and scraped by Prometheus when using Docker Compose; see [Observability](#observability) for the full list
 
 ---
 
@@ -196,5 +210,5 @@ These headers provide full traceability for debugging failed messages.
 - The project is designed to be run locally without external dependencies
 - Docker is used for infrastructure (Kafka, Prometheus, Grafana) and optionally for the application service
 - Configuration is explicit and environment-driven
-- The service processes events with controlled concurrency and backpressure; queue depth is exposed via Prometheus and visualized in Grafana
+- The service processes events with controlled concurrency and backpressure; metrics (queue depth, ingestion/processing, retries, DLQ) are exposed via Prometheus and the queue depth dashboard is available in Grafana
 - All failed messages are captured in the Dead-Letter Queue for manual inspection

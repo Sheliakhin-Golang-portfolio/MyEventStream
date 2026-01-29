@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - Stage 0.7: Observability (Ingestion & Processed Metrics)
+
+### Added
+
+#### Metrics
+- `**internal/obs/metrics.go**`: New counters and helpers for Stage 0.7 observability
+  - `events_ingested_total` counter: total events ingested from the broker into the internal queue
+  - `events_processed_total` counter: total events successfully processed by the pipeline
+  - `IncrementEventsIngested()` and `IncrementEventsProcessed()` helper methods
+
+#### Integration
+- `**internal/queue/queue.go**`: Ingested metric
+  - `IncrementEventsIngested()` called in `Enqueue` success path (after successful send to channel), with existing nil check for metrics
+- `**internal/worker/pool.go**`: Processed metric
+  - `IncrementEventsProcessed()` called in `processEvent` success path when pipeline completes successfully (before commit)
+
+### Changed
+
+#### Worker Pool
+- `**internal/worker/pool.go**`: Removed redundant metrics interface
+  - Pool uses `*obs.Metrics` directly; no separate metrics interface in current implementation
+  - Simplifies dependency and avoids unnecessary abstraction
+
+### Technical Details
+
+- Ingestion is counted at enqueue boundary (queue); processing is counted in worker pool success path (one increment per successfully processed event, no double-counting with retries).
+- No new packages or config changes; patterns align with existing Prometheus usage (const labels, nil-safe metrics in queue).
+- All five Stage 0.7 metrics (or equivalents) are now present: `events_ingested_total`, `events_processed_total`, `queue_depth`, `retry_attempts_total`, `dlq_messages_total`.
+
+---
+
 ## [0.6.0] - Stage 0.6: Retry & Dead-Letter Queue Implementation
 
 ### Added
@@ -543,10 +574,6 @@ Future stages and features will be documented here as they are implemented.
 
 ### Planned Features
 
-- Message processing pipeline (decode → validate → process)
-- Retry mechanism with exponential backoff
-- Dead-Letter Queue (DLQ) integration
-- Additional metrics (throughput, error rates, retry rates)
 - Health check implementation
 
 ---
