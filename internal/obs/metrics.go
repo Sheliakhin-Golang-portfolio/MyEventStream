@@ -8,7 +8,10 @@ import (
 
 // Metrics holds all Prometheus metrics for the application
 type Metrics struct {
-	QueueDepth prometheus.Gauge
+	QueueDepth          prometheus.Gauge
+	RetryAttemptsTotal  prometheus.Counter
+	DLQMessagesTotal    prometheus.Counter
+	RetryExhaustedTotal prometheus.Counter
 }
 
 // NewMetrics creates and initializes a new Metrics instance
@@ -18,6 +21,27 @@ func NewMetrics(serviceName string) *Metrics {
 		QueueDepth: promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "queue_depth",
 			Help: "Current depth of the internal event queue",
+			ConstLabels: prometheus.Labels{
+				"service": serviceName,
+			},
+		}),
+		RetryAttemptsTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "retry_attempts_total",
+			Help: "Total number of retry attempts for failed events",
+			ConstLabels: prometheus.Labels{
+				"service": serviceName,
+			},
+		}),
+		DLQMessagesTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "dlq_messages_total",
+			Help: "Total number of messages sent to the dead-letter queue",
+			ConstLabels: prometheus.Labels{
+				"service": serviceName,
+			},
+		}),
+		RetryExhaustedTotal: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "retry_exhausted_total",
+			Help: "Total number of messages that exhausted all retry attempts",
 			ConstLabels: prometheus.Labels{
 				"service": serviceName,
 			},
@@ -38,4 +62,19 @@ func (m *Metrics) DecrementQueueDepth() {
 // NullifyQueueDepth sets the queue depth gauge metric to 0
 func (m *Metrics) NullifyQueueDepth() {
 	m.QueueDepth.Set(0)
+}
+
+// IncrementRetryAttempts increments the retry attempts counter by 1
+func (m *Metrics) IncrementRetryAttempts() {
+	m.RetryAttemptsTotal.Inc()
+}
+
+// IncrementDLQMessages increments the DLQ messages counter by 1
+func (m *Metrics) IncrementDLQMessages() {
+	m.DLQMessagesTotal.Inc()
+}
+
+// IncrementRetryExhausted increments the retry exhausted counter by 1
+func (m *Metrics) IncrementRetryExhausted() {
+	m.RetryExhaustedTotal.Inc()
 }

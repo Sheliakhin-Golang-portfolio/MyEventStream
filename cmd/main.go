@@ -15,6 +15,7 @@ import (
 
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/config"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/consumer"
+	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/dlq"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/logger"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/obs"
 	"github.com/Sheliakhin-Golang-portfolio/MyEventStream/internal/queue"
@@ -49,13 +50,13 @@ func main() {
 	eventQueue := queue.NewQueue(cfg.Queue.BufferSize, metrics)
 	defer eventQueue.Close()
 
-	// Create worker pool
-	workerPool, err := worker.NewPool(cfg.WorkerPool.Size, eventQueue, logger.Logger)
+	// Create DLQ producer
+	dlqProducer, err := dlq.NewProducer(cfg, logger.Logger)
 	if err != nil {
-		logger.Logger.Fatal("Failed to create worker pool", zap.Error(err))
+		logger.Logger.Fatal("Failed to create DLQ producer", zap.Error(err))
 		os.Exit(1)
 	}
-	defer workerPool.Stop()
+	defer dlqProducer.Close()
 
 	// Create Kafka consumer with queue
 	kafkaConsumer, err := consumer.NewConsumer(cfg, logger.Logger, eventQueue)
@@ -64,6 +65,22 @@ func main() {
 		os.Exit(1)
 	}
 	defer kafkaConsumer.Close()
+
+	// Create worker pool with DLQ and retry config
+	workerPool, err := worker.NewPool(
+		cfg.WorkerPool.Size,
+		eventQueue,
+		logger.Logger,
+		dlqProducer,
+		&cfg.Retry,
+		kafkaConsumer.CommitMessage,
+		metrics,
+	)
+	if err != nil {
+		logger.Logger.Fatal("Failed to create worker pool", zap.Error(err))
+		os.Exit(1)
+	}
+	defer workerPool.Stop()
 
 	// Create root context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

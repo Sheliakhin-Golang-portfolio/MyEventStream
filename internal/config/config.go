@@ -6,18 +6,21 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 // Config holds all configuration for the application
 type Config struct {
-	Kafka     KafkaConfig
-	Logging   LoggingConfig
-	Service   ServiceConfig
-	Queue     QueueConfig
-	Metrics   MetricsConfig
+	Kafka      KafkaConfig
+	Logging    LoggingConfig
+	Service    ServiceConfig
+	Queue      QueueConfig
+	Metrics    MetricsConfig
 	WorkerPool WorkerPoolConfig
+	Retry      RetryConfig
+	DLQ        DLQConfig
 }
 
 // KafkaConfig holds Kafka connection settings
@@ -50,6 +53,22 @@ type MetricsConfig struct {
 // WorkerPoolConfig holds worker pool configuration
 type WorkerPoolConfig struct {
 	Size int
+}
+
+// RetryConfig holds retry configuration
+type RetryConfig struct {
+	MaxAttempts int
+	// Base delay in milliseconds
+	BaseDelayMs time.Duration
+	// Max delay in milliseconds
+	MaxDelayMs time.Duration
+	Multiplier float64
+}
+
+// DLQConfig holds dead-letter queue configuration
+type DLQConfig struct {
+	Topic   string
+	Brokers []string
 }
 
 // Load reads configuration from environment variables
@@ -137,6 +156,84 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("WORKER_POOL_SIZE must be greater than 0, got: %d", workerPoolSize)
 	}
 	cfg.WorkerPool.Size = workerPoolSize
+
+	// Retry configuration
+	retryMaxAttemptsStr := os.Getenv("RETRY_MAX_ATTEMPTS")
+	if retryMaxAttemptsStr == "" {
+		retryMaxAttemptsStr = "3" // default
+	}
+	retryMaxAttempts, err := strconv.Atoi(retryMaxAttemptsStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid RETRY_MAX_ATTEMPTS: %w", err)
+	}
+	if retryMaxAttempts < 0 {
+		return nil, fmt.Errorf("RETRY_MAX_ATTEMPTS must be >= 0, got: %d", retryMaxAttempts)
+	}
+	cfg.Retry.MaxAttempts = retryMaxAttempts
+
+	retryBaseDelayMsStr := os.Getenv("RETRY_BASE_DELAY_MS")
+	if retryBaseDelayMsStr == "" {
+		retryBaseDelayMsStr = "100" // default 100ms
+	}
+	retryBaseDelay, err := strconv.Atoi(retryBaseDelayMsStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid RETRY_BASE_DELAY_MS: %w", err)
+	}
+	if retryBaseDelay <= 0 {
+		return nil, fmt.Errorf("RETRY_BASE_DELAY_MS must be > 0, got: %d", retryBaseDelay)
+	}
+	cfg.Retry.BaseDelayMs = time.Duration(retryBaseDelay) * time.Millisecond
+
+	retryMaxDelayMsStr := os.Getenv("RETRY_MAX_DELAY_MS")
+	if retryMaxDelayMsStr == "" {
+		retryMaxDelayMsStr = "10000" // default 10s
+	}
+	retryMaxDelay, err := strconv.Atoi(retryMaxDelayMsStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid RETRY_MAX_DELAY_MS: %w", err)
+	}
+	if retryMaxDelay <= 0 {
+		return nil, fmt.Errorf("RETRY_MAX_DELAY_MS must be > 0, got: %d", retryMaxDelay)
+	}
+	cfg.Retry.MaxDelayMs = time.Duration(retryMaxDelay) * time.Millisecond
+
+	retryMultiplierStr := os.Getenv("RETRY_MULTIPLIER")
+	if retryMultiplierStr == "" {
+		retryMultiplierStr = "2.0" // default exponential backoff
+	}
+	retryMultiplier, err := strconv.ParseFloat(retryMultiplierStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid RETRY_MULTIPLIER: %w", err)
+	}
+	if retryMultiplier <= 0 {
+		return nil, fmt.Errorf("RETRY_MULTIPLIER must be > 0, got: %f", retryMultiplier)
+	}
+	cfg.Retry.Multiplier = retryMultiplier
+
+	// DLQ configuration
+	dlqTopic := os.Getenv("DLQ_TOPIC")
+	if dlqTopic == "" {
+		dlqTopic = "myeventstream-dlq" // default
+	}
+	cfg.DLQ.Topic = dlqTopic
+
+	// DLQ brokers (reuse main Kafka brokers if not specified)
+	dlqBrokers := os.Getenv("DLQ_BROKERS")
+	if dlqBrokers == "" {
+		cfg.DLQ.Brokers = cfg.Kafka.Brokers
+	} else {
+		brokers := strings.Split(dlqBrokers, ",")
+		cfg.DLQ.Brokers = make([]string, 0, len(brokers))
+		for _, broker := range brokers {
+			broker = strings.TrimSpace(broker)
+			if broker != "" {
+				cfg.DLQ.Brokers = append(cfg.DLQ.Brokers, broker)
+			}
+		}
+		if len(cfg.DLQ.Brokers) == 0 {
+			return nil, fmt.Errorf("DLQ_BROKERS must contain at least one valid broker address")
+		}
+	}
 
 	return cfg, nil
 }

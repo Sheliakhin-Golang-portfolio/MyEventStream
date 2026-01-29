@@ -74,24 +74,39 @@ Used by:
 
 ## Retry Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `MAX_RETRY_ATTEMPTS` | Maximum number of retry attempts before DLQ |
-| `RETRY_BACKOFF_BASE` | Retry backoff base duration in seconds |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RETRY_MAX_ATTEMPTS` | Maximum number of retry attempts before sending to DLQ | `3` |
+| `RETRY_BASE_DELAY_MS` | Base delay in milliseconds for exponential backoff | `100` |
+| `RETRY_MAX_DELAY_MS` | Maximum delay in milliseconds (cap for exponential backoff) | `10000` |
+| `RETRY_MULTIPLIER` | Exponential backoff multiplier | `2.0` |
 
 Used by:
 - MyEventStream service
+
+**Retry Behavior:**
+- Failed events are retried with exponential backoff: `RETRY_BASE_DELAY_MS * (RETRY_MULTIPLIER ^ attempt)`
+- Backoff is capped at `RETRY_MAX_DELAY_MS`
+- Default configuration: 3 retries with delays of 100ms, 200ms, 400ms
+- All retry operations respect context cancellation for graceful shutdown
 
 ---
 
 ## Dead-Letter Queue Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `DLQ_TOPIC` | Dead-Letter Queue topic name |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DLQ_TOPIC` | Kafka topic for failed messages (Dead-Letter Queue) | `myeventstream-dlq` |
+| `DLQ_BROKERS` | Kafka broker addresses for DLQ (optional, defaults to `KAFKA_BROKERS`) | — |
 
 Used by:
 - MyEventStream service
+
+**DLQ Behavior:**
+- Messages that exhaust all retry attempts are published to the DLQ topic
+- Each DLQ message includes metadata headers: `original_topic`, `original_partition`, `original_offset`, `retry_attempts`, `max_retries`, `error_message`, `timestamp`
+- DLQ publishing has internal retry logic (3 attempts) to ensure delivery
+- If DLQ publish fails after retries, the message is lost but offset is committed to prevent infinite reprocessing
 
 ---
 

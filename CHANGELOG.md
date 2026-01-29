@@ -7,6 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - Stage 0.6: Retry & Dead-Letter Queue Implementation
+
+### Added
+
+#### Retry Package
+- `**internal/retry/retry.go**`: Retry logic with exponential backoff
+  - `DoWithRetry(ctx, cfg, attempt, fn)` function that wraps operations with retry logic
+  - Exponential backoff calculation: `baseDelay * (multiplier ^ attempt)` capped at `MaxDelay`
+  - Context-aware: respects `ctx.Done()` for graceful shutdown
+  - Returns `ErrMaxRetriesExceeded` when all retry attempts are exhausted
+- `**internal/retry/retry_test.go**`: Comprehensive unit tests
+  - Tests for success on first attempt, success after retries, exhausted retries
+  - Context cancellation tests (pre-cancelled and during retry)
+  - Backoff calculation tests with various multipliers and caps
+
+#### Dead-Letter Queue Package
+- `**internal/dlq/producer.go**`: Kafka-based DLQ producer
+  - `Producer` struct wrapping `kafka.Writer` for DLQ topic
+  - `NewProducer(cfg, logger)` constructor reading DLQ config from environment
+  - `Publish(ctx, event, errorMsg)` method that:
+    - Publishes failed events to DLQ Kafka topic
+    - Encodes metadata into Kafka headers: `original_topic`, `original_partition`, `original_offset`, `retry_attempts`, `max_retries`, `error_message`, `timestamp`
+    - Implements internal retry logic (3 attempts) for DLQ publish failures
+    - Uses structured logging for all operations
+  - `Close()` method for graceful shutdown
+- `**internal/dlq/producer_test.go**`: Unit tests for DLQ producer
+  - Validation tests for nil config/logger
+  - Metadata extraction tests
+
+#### Event Metadata
+- `**internal/types/event.go**`: Extended `Event` struct
+  - Added `Meta *EventMeta` field to carry Kafka and retry metadata
+  - `EventMeta` struct with fields:
+    - `Topic`, `Partition`, `Offset` for Kafka message metadata
+    - `RetryAttempt`, `MaxRetries` for retry tracking
+
+#### Configuration
+- `**internal/config/config.go**`: Extended configuration
+  - `RetryConfig` with `MaxAttempts`, `BaseDelayMs`, `MaxDelayMs`, `Multiplier`
+  - `DLQConfig` with `Topic`, `Brokers` (defaults to main Kafka brokers)
+  - Environment variable loading for:
+    - `RETRY_MAX_ATTEMPTS` (default: 3)
+    - `RETRY_BASE_DELAY_MS` (default: 100ms)
+    - `RETRY_MAX_DELAY_MS` (default: 10000ms)
+    - `RETRY_MULTIPLIER` (default: 2.0)
+    - `DLQ_TOPIC` (default: myeventstream-dlq)
+    - `DLQ_BROKERS` (optional, defaults to `KAFKA_BROKERS`)
+- `**.env.example**`: Updated with retry and DLQ configuration examples
+
+#### Metrics
+- `**internal/obs/metrics.go**`: Added retry and DLQ metrics
+  - `retry_attempts_total` counter: tracks retry attempts
+  - `dlq_messages_total` counter: tracks messages sent to DLQ
+  - `retry_exhausted_total` counter: tracks messages that exhausted all retries
+  - Methods: `IncrementRetryAttempts()`, `IncrementDLQMessages()`, `IncrementRetryExhausted()`
+
+### Changed
+
+#### Kafka Consumer
+- `**internal/consumer/kafka_consumer.go**`: Manual offset commit
+  - Changed from `ReadMessage` (auto-commit) to `FetchMessage` (manual commit)
+  - Added `CommitInterval: 0` to `ReaderConfig` for explicit commit control
+  - Added `commitChan` channel and `commitLoop()` goroutine for async commits
+  - `CommitMessage(msg)` method allows worker to signal completion
+  - Attaches Kafka metadata (`Topic`, `Partition`, `Offset`) to `Event.Meta` before enqueuing
+  - Offset committed only after successful processing or DLQ publish (at-least-once semantics)
+  - `commitLoop()` is designed to drain `commitChan` channel before stopping the loop
+
+#### Worker Pool
+- `**internal/worker/pool.go**`: Integrated retry and DLQ
+  - Extended `NewPool()` signature to accept `dlqProducer`, `retryConfig`, `commitFunc`, `metrics`
+  - `processEvent()` wraps pipeline execution in `retry.DoWithRetry()`
+  - Tracks retry attempts in `Event.Meta.RetryAttempt`
+  - On retry exhaustion (`ErrMaxRetriesExceeded`):
+    - Publishes event to DLQ with error details
+    - Increments `retry_exhausted_total` and `dlq_messages_total` metrics
+    - Commits offset to prevent reprocessing
+  - On success: commits offset via `commitFunc`
+  - Added helper functions: `getTopic()`, `getPartition()`, `getOffset()`, `getAttempt()`, `getMaxAttempts()`
+  - All retry sleeps respect `ctx.Done()` for graceful shutdown
+
+#### Main Application
+- `**cmd/main.go**`: Wired retry and DLQ components
+  - Creates `dlq.Producer` with DLQ config
+  - Builds `retry.Config` from loaded environment variables
+  - Passes DLQ producer, retry config, commit callback, and metrics to worker pool
+  - Ensures proper shutdown order: DLQ producer closed after worker pool
+
+### Technical Details
+
+- Failed events are retried up to `RETRY_MAX_ATTEMPTS` times with exponential backoff
+- Exponential backoff calculation: `RETRY_BASE_DELAY_MS * (RETRY_MULTIPLIER ^ attempt)`, capped at `RETRY_MAX_DELAY_MS`
+- Default configuration: 3 retries with 100ms base delay, 2.0 multiplier → delays: 100ms, 200ms, 400ms
+- All backoff sleeps respect context cancellation for graceful shutdown
+- Messages that fail after all retries are published to `DLQ_TOPIC` with detailed metadata headers
+- DLQ message headers include: `original_topic`, `original_partition`, `original_offset`, `retry_attempts`, `max_retries`, `error_message`, `timestamp`
+- Operators must monitor `dlq_messages_total` metric for failed message tracking
+- Offsets are committed only after successful processing or DLQ publish (at-least-once delivery semantics)
+- DLQ publish failures are logged but do not block processing (offset committed to prevent infinite reprocessing)
+- Trade-off: potential message loss vs infinite reprocessing loop when DLQ publish fails
+
+---
+
 ## [0.5.0] - Stage 0.5: Processing Pipeline Implementation
 
 ### Added

@@ -148,6 +148,49 @@ The application service can be stopped using standard process termination (Ctrl+
 
 ---
 
+## Inspecting Dead-Letter Queue Messages
+
+Messages that fail after all retry attempts are sent to the Dead-Letter Queue (DLQ) for manual inspection.
+
+To inspect DLQ messages, use `kafka-console-consumer`:
+
+```bash
+kafka-console-consumer --bootstrap-server localhost:9092 \
+  --topic myeventstream-dlq \
+  --from-beginning \
+  --property print.headers=true \
+  --property print.timestamp=true
+```
+
+**When running via Docker Compose:**
+
+If Kafka is running in Docker Compose (and port 9092 is not published to the host), you can access `kafka-console-consumer` through the Kafka container:
+
+```bash
+docker compose exec kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic myeventstream-dlq \
+  --from-beginning \
+  --property print.headers=true \
+  --property print.timestamp=true
+```
+
+The Confluent Kafka image includes all Kafka CLI tools, so `kafka-console-consumer` is available inside the container.
+
+Each DLQ message includes the following headers:
+
+- `original_topic` — the original Kafka topic
+- `original_partition` — the original partition number
+- `original_offset` — the original offset
+- `retry_attempts` — number of retry attempts made
+- `max_retries` — maximum retries configured
+- `error_message` — the final error that caused the message to be sent to DLQ
+- `timestamp` — when the message was published to DLQ
+
+These headers provide full traceability for debugging failed messages.
+
+---
+
 ## Notes for Reviewers
 
 - The project is designed to be run locally without external dependencies
