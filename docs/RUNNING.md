@@ -67,6 +67,19 @@ This starts:
 
 After that the application is ready to use.
 
+### Verifying that messages are processed
+
+In Kafka, **consuming does not delete messages** from the topic. The log is append-only; messages remain until retention (time or size). So the **total message count** of a topic does **not** decrease when MyEventStream consumes.
+
+To verify that the service is processing messages:
+
+- **Consumer group lag** — Should go to 0 (or stay low) when the consumer keeps up:
+  ```bash
+  docker compose exec kafka kafka-consumer-groups --bootstrap-server localhost:9092 --describe --group myeventstream-consumer
+  ```
+- **Application metrics** — `events_ingested_total` and `events_processed_total` at `http://localhost:8080/metrics` (or your `METRICS_PORT`) increase as messages are consumed and processed.
+- **Application logs** — Look for "Enqueued message" and "Event processed successfully" in the myeventstream container logs.
+
 ---
 
 <a id="observability"></a>

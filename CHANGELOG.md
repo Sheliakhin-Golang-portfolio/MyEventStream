@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - Stage 0.8: Load Testing Infrastructure
+
+### Added
+
+#### Load Testing Package
+- `**loadtest/**`: New directory containing load testing tools and documentation
+  - `**loadtest/README.md**`: Comprehensive load testing guide
+    - Documentation for producer scripts, Go producer CLI, and HTTP producer mode
+    - Step-by-step procedure for measuring throughput vs workers
+    - Test results section with throughput measurements and observations
+    - Troubleshooting guide for common issues
+- `**loadtest/produce.sh**`: Bash script for producing messages via kafka-console-producer
+  - Automatically detects Docker Compose environment
+  - Supports custom payload files
+  - Uses `docker compose exec` when Kafka runs in Docker
+- `**loadtest/produce.ps1**`: PowerShell script for Windows environments
+  - Equivalent functionality to `produce.sh`
+  - Supports `-PayloadFile` parameter for custom payloads
+- `**loadtest/cmd/producer/main.go**`: Go producer CLI and HTTP server
+  - CLI mode: produces messages to Kafka with configurable batch size, rate, and duration
+  - HTTP mode: accepts POST requests and produces to Kafka (enables Vegeta load testing)
+  - Command-line flags: `-brokers`, `-topic`, `-batch`, `-rate`, `-duration`, `-http`
+  - Reads configuration from environment variables (`KAFKA_BROKERS`, `KAFKA_TOPIC`)
+  - Rate limiting using ticker for controlled message production
+  - Graceful shutdown support via signal handling
+- `**loadtest/payload.json**`, `**loadtest/payload-2.json**`, `**loadtest/payload-3.json**`: Sample payload files
+  - Valid JSON matching pipeline format: `{"Id":"..."}`
+  - Used by producer scripts and Go producer for load generation
+- `**loadtest/vegeta-targets.txt**`: Example Vegeta targets file
+  - Contains HTTP endpoint for Vegeta load testing: `POST http://localhost:8081/`
+
+#### Processing Pipeline Enhancement
+- `**internal/pipeline/process.go**`: CPU-bound simulation for realistic load testing
+  - Added SHA256 hashing loop (1000 iterations) to simulate CPU-bound processing
+  - Uses `crypto/sha256` and `encoding/hex` packages
+  - Context cancellation checks during processing loop for graceful shutdown
+  - Maintains deterministic logging behavior (same input → same log output)
+  - Prevents compiler optimization by encoding hash result to string
+
+### Changed
+
+#### Processing Pipeline
+- `**internal/pipeline/process.go**`: Enhanced business logic stage
+  - Changed from simple logging to CPU-bound simulation
+  - Processing now performs 1000 SHA256 hash operations per event
+  - Context cancellation checks added inside processing loop
+  - More realistic workload for load testing and performance evaluation
+
+### Technical Details
+
+- Load testing infrastructure enables systematic performance evaluation of MyEventStream
+- Producer tools support multiple methods: shell scripts (kafka-console-producer), Go CLI, and HTTP endpoint (for Vegeta)
+- CPU-bound simulation in `process.go` provides realistic processing workload for throughput measurements
+- Throughput vs workers testing procedure documented: vary `WORKER_POOL_SIZE`, run producer, query Prometheus `rate(events_processed_total[1m])`
+- Test results demonstrate system scalability: throughput scales with worker count up to producer rate (500 msg/s), queue depth decreases with more workers, stable CPU usage (13-17%), linear memory growth with worker count
+- All producer tools respect graceful shutdown (SIGTERM/SIGINT) for clean test termination
+- HTTP producer mode enables Vegeta-based load testing with configurable rate and duration
+- Docker Compose configuration supports host-based load testing via optional port publishing (9092) and `KAFKA_ADVERTISED_LISTENERS` configuration
+
+---
+
 ## [0.7.0] - Stage 0.7: Observability (Ingestion & Processed Metrics)
 
 ### Added
@@ -565,16 +626,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minimal runtime image (Alpine Linux)
 - Environment-driven configuration approach
 - No hardcoded secrets or configuration values
-
----
-
-## [Unreleased]
-
-Future stages and features will be documented here as they are implemented.
-
-### Planned Features
-
-- Health check implementation
 
 ---
 

@@ -35,7 +35,7 @@ The service architecture follows a clear flow:
 
 The project is designed to demonstrate how real Go backend services are built and evolved, not to replace Kafka or NATS. EventStream focuses on at-least-once delivery, controlled concurrency, and operational visibility — the core problems most Go services solve in production.
 
-**Current Stage:** Stage 0.7 - New metrics
+**Current Stage:** Stage 0.8 - Load testing
 
 ---
 
@@ -63,6 +63,7 @@ All detailed documentation is moved to `docs/` folder:
 
 - [Configuration & Environment Variables](docs/CONFIGURATION.md)
 - [Running Locally](docs/RUNNING.md)
+- [Load testing instructions and results](loadtest/README.md)
 
 ---
 

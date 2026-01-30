@@ -19,7 +19,7 @@ All variables listed here are preserved from the original README and configurati
 
 | Variable | Description |
 |----------|-------------|
-| `KAFKA_BROKERS` | Kafka broker addresses (comma-separated). Example: `localhost:9092,localhost:9093` |
+| `KAFKA_BROKERS` | Kafka broker addresses (comma-separated). Example: `localhost:9092` or `host.docker.internal:9092` (Docker Compose) |
 | `KAFKA_TOPIC` | Kafka topic to consume from |
 | `KAFKA_GROUP_ID` | Kafka consumer group ID |
 
