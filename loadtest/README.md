@@ -302,7 +302,7 @@ Use `rate()` for throughput (events/second) and `increase()` for total counts ov
 ### Throughput vs Workers
 
 | Worker Pool Size | Producer Rate | Consumer Throughput (events/s) | Queue Depth (max) | Average CPU usage (Docker %) | Memory usage (avg) | Notes |
-|-----------------|---------------|------------------------------|-------------------|-------|
+|-----------------|---------------|------------------------------|-------------------|-------|-------|-------|
 | 2               | 500 msg/s     | 441.18                        | 228             | 13.58 | 9.59 Mb | Baseline |
 | 5               | 500 msg/s     | 493.33                        | 204             | 14.67 | 12.53 Mb | |
 | 10              | 500 msg/s     | 500                        | 160             | 15.77 | 22.8 Mb | Default |
