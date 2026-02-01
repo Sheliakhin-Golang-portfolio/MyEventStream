@@ -75,8 +75,7 @@ As there are no multiple releases during development, all version changes are co
 
 ---
 
-## Project Status
+## License
 
-This project is developed for portfolio and learning purposes.  
-The focus is correctness, clarity, and realistic backend patterns.  
-**NOT FOR COMMERCIAL USE!**
+This project is developed for educational and portfolio purposes.
+Licensed under the Apache License 2.0.
