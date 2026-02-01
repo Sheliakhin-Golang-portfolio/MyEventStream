@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0] - Stage 1.0: Release Documentation
+
+### Added
+
+#### Architecture Documentation
+- `**docs/ARCHITECTURE.md**`: Comprehensive architecture documentation
+  - High-level design principles and technical constraints
+  - System context diagram (Mermaid) showing event flow
+  - Container architecture overview
+  - Service internal structure and directory layout
+  - Data flow and interaction patterns (pull-based consumption, processing pipeline, graceful shutdown)
+  - Deployment and infrastructure details
+  - Quality attributes (performance, reliability, observability)
+  - Technology stack overview
+  - References to related documentation (CONFIGURATION.md, RUNNING.md, DECISIONS.md)
+
+#### Design Decisions Documentation
+- `**docs/DECISIONS.md**`: Architecture Decision Records (ADRs)
+  - Documents 12 key architectural and design decisions
+  - Decision 1: Message broker choice (single external broker)
+  - Decision 2: At-least-once delivery semantics
+  - Decision 3: Bounded internal queue with backpressure
+  - Decision 4: Fixed-size worker pool concurrency model
+  - Decision 5: Explicit processing pipeline stages
+  - Decision 6: Retry strategy with exponential backoff
+  - Decision 7: Dead-letter queue implementation
+  - Decision 8: Observability as first-class concern
+  - Decision 9: Graceful shutdown using context.Context
+  - Decision 10: Environment-based configuration strategy
+  - Decision 11: Testing strategy (unit, integration, load testing)
+  - Decision 12: Scope control and deferred features
+  - Each decision includes rationale, alternatives considered, and implications
+
+#### License
+- `**LICENSE**`: Apache License 2.0
+  - Full Apache License 2.0 text
+  - Copyright 2026 Mikhail Sheliakhin
+  - Standard Apache 2.0 terms and conditions
+
+### Changed
+
+#### Documentation Updates
+- `**README.md**`: Enhanced project documentation
+  - Updated "Current Stage" to Stage 1 - Release
+  - Added documentation section referencing new architecture and decisions documents
+  - Added License section referencing Apache License 2.0
+  - Improved documentation organization with links to `docs/` folder
+  - Updated architecture overview to reference detailed documentation
+
+### Technical Details
+
+- Stage 1.0 marks the release milestone with comprehensive documentation
+- Architecture documentation provides complete system overview for developers and operators
+- Decision records document intentional trade-offs and design rationale
+- Apache License 2.0 provides clear licensing terms for the project
+- All documentation follows consistent formatting and cross-references related documents
+
+---
+
 ## [0.8.0] - Stage 0.8: Load Testing Infrastructure
 
 ### Added
