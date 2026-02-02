@@ -69,13 +69,11 @@ func (c *Consumer) Start(ctx context.Context) error {
 
 	for {
 		// Check if context is cancelled
-		select {
-		case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
 			c.logger.Info("Context cancelled, stopping consumer")
 			close(c.commitChan)
 			<-commitDone
-			return ctx.Err()
-		default:
+			return err
 		}
 
 		// Fetch message with context (does NOT auto-commit)

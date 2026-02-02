@@ -236,14 +236,12 @@ func runCLIProducer(writer *kafka.Writer, logger *zap.Logger) {
 
 	// Producer loop
 	for {
-		select {
-		case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
 			logger.Info("Producer stopped",
 				zap.Int64("total_produced", produced),
 			)
 			wg.Wait()
 			return
-		default:
 		}
 
 		// Check batch limit

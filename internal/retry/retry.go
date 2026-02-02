@@ -24,10 +24,8 @@ func DoWithRetry(ctx context.Context, cfg *config.RetryConfig, fn func() error) 
 	// Loop through the retry attempts
 	for i := range cfg.MaxAttempts + 1 {
 		// Check context before attempting
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// Execute the function

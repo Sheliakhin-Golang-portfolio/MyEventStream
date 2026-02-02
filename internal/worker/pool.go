@@ -104,13 +104,11 @@ func (p *Pool) worker(workerID int) {
 
 	for {
 		// Check if context is cancelled
-		select {
-		case <-p.ctx.Done():
+		if err := p.ctx.Err(); err != nil {
 			p.logger.Debug("Worker stopping due to context cancellation",
 				zap.Int("workerID", workerID),
 			)
 			return
-		default:
 		}
 
 		// Dequeue event (blocks if queue is empty)
@@ -148,10 +146,8 @@ func (p *Pool) worker(workerID int) {
 // processEvent processes a single event with retry logic and DLQ handling
 func (p *Pool) processEvent(event *types.Event, workerID int) {
 	// Check if main context is cancelled before processing
-	select {
-	case <-p.ctx.Done():
+	if err := p.ctx.Err(); err != nil {
 		return
-	default:
 	}
 
 	// Create Kafka message for commit (from event metadata)

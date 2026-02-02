@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - Minor patch
+
+### Changed
+
+- **Context cancellation checks**: Reduced frequency of `select` statements that check for context cancellation (`ctx.Done()`). Cancellation is still respected at key boundaries; the change lessens redundant checks in hot paths to lower overhead while preserving graceful shutdown behavior.
+
+---
+
 ## [1.0.0] - Stage 9: Release Documentation
 
 ### Added
